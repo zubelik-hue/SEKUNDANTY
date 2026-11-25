@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0d0f1a">
+<title>Секунданты</title>
+<style>
+  :root { --bg:#0d0f1a; --card:#171a2b; --line:#2a2e48; --text:#f3f4fa; --muted:#9aa0c0; --accent:#ffcc33; --red:#ff3b4e; --green:#3ddc97; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+  body { display:flex; flex-direction:column; min-height:100dvh; padding: env(safe-area-inset-top) 20px env(safe-area-inset-bottom); overscroll-behavior:none; }
+  .screen { display:none; flex:1; flex-direction:column; align-items:center; justify-content:center; text-align:center; gap:18px; padding:24px 0; }
+  .screen.on { display:flex; }
+  h1 { font-size:30px; margin:0; letter-spacing:-.5px; }
+  .muted { color:var(--muted); }
+  .brand { font-size:13px; letter-spacing:3px; text-transform:uppercase; color:var(--accent); font-weight:700; }
+  form { width:100%; max-width:360px; display:flex; flex-direction:column; gap:12px; }
+  input { width:100%; font-size:18px; padding:16px; border-radius:14px; border:1px solid var(--line); background:var(--card); color:var(--text); outline:none; }
+  input:focus { border-color:var(--accent); }
+  .btn { font-size:18px; font-weight:700; padding:16px; border-radius:14px; border:0; background:var(--accent); color:#1a1300; cursor:pointer; }
+  .btn:disabled { opacity:.5; }
+  .err { color:var(--red); min-height:20px; font-size:15px; }
+  .target { font-size:17px; color:var(--muted); }
+  .target b { color:var(--accent); font-size:22px; }
+  .timer { font-variant-numeric: tabular-nums; font-size:72px; font-weight:800; letter-spacing:-2px; min-height:90px; line-height:90px; }
+  .timer.hidden-time { color:var(--muted); font-size:56px; letter-spacing:6px; }
+  .stop { width:min(72vw, 300px); aspect-ratio:1; border-radius:50%; border:0; font-size:44px; font-weight:900; letter-spacing:2px; color:#fff;
+    background: radial-gradient(circle at 35% 30%, #ff6b79, var(--red) 55%, #b5162a);
+    box-shadow: 0 14px 0 #8a0f1f, 0 24px 40px rgba(255,59,78,.35); touch-action: manipulation; user-select:none; -webkit-user-select:none; transition: transform .05s; }
+  .stop:active { transform: translateY(8px); box-shadow: 0 6px 0 #8a0f1f, 0 12px 24px rgba(255,59,78,.3); }
+  .stop:disabled { filter: grayscale(.8) brightness(.6); }
+  .big { font-size:96px; font-weight:900; line-height:1; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:18px; padding:18px; width:100%; max-width:380px; }
+  .place { font-size:64px; font-weight:900; color:var(--accent); line-height:1; }
+  .row { display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--line); font-variant-numeric: tabular-nums; gap:12px; }
+  .row:last-child { border:0; }
+  .row.me { color:var(--accent); font-weight:700; }
+  .link { background:none; border:0; color:var(--muted); text-decoration:underline; font-size:15px; }
+  .conn { position:fixed; top:calc(env(safe-area-inset-top) + 8px); right:12px; font-size:12px; color:var(--red); display:none; }
+  .verdict { font-size:26px; font-weight:900; padding:12px 18px; border-radius:16px; }
+  .verdict.in { background:rgba(61,220,151,.15); color:var(--green); }
+  .verdict.out { background:rgba(255,59,78,.15); color:var(--red); }
+  .verdict.win { background:rgba(255,204,51,.15); color:var(--accent); font-size:32px; }
+  .check { width:96px; height:96px; border-radius:50%; background:var(--green); color:#062; display:flex; align-items:center; justify-content:center; font-size:54px; font-weight:900; }
+</style>
+</head>
+<body>
+<div class="conn" id="conn">● нет связи</div>
+
+<!-- Регистрация -->
+<section class="screen" id="s-join">
+  <div class="brand">Секунданты</div>
+  <h1>Представьтесь</h1>
+  <p class="muted" style="margin:0">Ваше имя увидят на экране результатов</p>
+  <form id="join-form" autocomplete="on">
+    <input id="first" name="given-name" autocomplete="given-name" placeholder="Имя" maxlength="40" required>
+    <input id="last" name="family-name" autocomplete="family-name" placeholder="Фамилия" maxlength="40" required>
+    <button class="btn" id="join-btn" type="submit">Играть</button>
+    <div class="err" id="join-err"></div>
+  </form>
+</section>
+
+<!-- Ожидание старта -->
+<section class="screen" id="s-wait">
+  <div class="brand">Секунданты</div>
+  <h1 id="hello"></h1>
+  <div class="card">
+    <div class="target">Задача — нажать <b>СТОП</b> ровно на</div>
+    <div class="big" id="wait-target" style="font-size:56px;margin-top:8px"></div>
+    <p class="muted" style="margin:12px 0 0;font-size:14px" id="wait-hint"></p>
+  </div>
+  <p class="muted" id="wait-status">Ждём старта от ведущего…</p>
+  <button class="link" id="rename">Изменить имя</button>
+</section>
+
+<!-- Игра -->
+<section class="screen" id="s-play">
+  <div class="target">Нажмите на <b id="play-target"></b></div>
+  <div class="timer" id="timer">0,00</div>
+  <button class="stop" id="stop" disabled>СТОП</button>
+  <p class="muted" id="play-hint" style="min-height:22px"></p>
+</section>
+
+<!-- Нажато -->
+<section class="screen" id="s-pressed">
+  <div class="check">✓</div>
+  <h1>Принято!</h1>
+  <p class="muted">Ваш результат покажем, когда все нажмут</p>
+  </section>
+
+<!-- Опоздал к раунду -->
+<section class="screen" id="s-late">
+  <h1 id="late-title">Раунд уже идёт</h1>
+  <p class="muted" id="late-text">Вы в игре со следующего раунда. Следите за экраном!</p>
+</section>
+
+<!-- Выбыл (режим на выбывание) -->
+<section class="screen" id="s-out">
+  <div class="big" style="font-size:72px">😔</div>
+  <h1>Вы выбыли</h1>
+  <p class="muted" id="out-text">Следите за финалом на большом экране!</p>
+</section>
+
+<!-- Результат -->
+<section class="screen" id="s-result">
+  <div class="brand" id="res-brand">Результат</div>
+  <div id="verdict"></div>
+  <div id="my-result"></div>
+  <div class="card" id="top"></div>
+  <p class="muted" id="res-foot">Ждём следующий раунд…</p>
+</section>
+
+<script type="module">
+import {
+  connect, configured, Clock, gameRef, gameData, db, doc, getDoc, setDoc, updateDoc, onSnapshot, serverTimestamp,
+  fmtTime, fmtTarget, fmtDiff, esc, $, setupError,
+} from './common.js';
+
+const LS = 'stoptimer.profile';
+let uid = null;
+let me = null;          // {first, last, fromRound, epoch} — мой документ игрока
+let G = null;           // документ игры
+let pressedRound = null; // в каком раунде я уже нажал
+let checkedRound = null;
+let editing = false;
+let wakeLock = null;
+let connected = false;
+
+function show(id) { document.querySelectorAll('.screen').forEach(s => s.classList.toggle('on', s.id === id)); }
+async function keepAwake() {
+  try { if ('wakeLock' in navigator && !wakeLock) { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.onrelease = () => wakeLock = null; } } catch (_) {}
+}
+const playerRef = () => doc(db, 'games', 'main', 'players', uid);
+
+// ---------- регистрация ----------
+$('#join-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  $('#join-err').textContent = '';
+  $('#join-btn').disabled = true;
+  const first = $('#first').value.trim().slice(0, 40), last = $('#last').value.trim().slice(0, 40);
+  try {
+    if (!first || !last) throw new Error('Введите имя и фамилию');
+    if (!G) throw new Error('Игра ещё не открыта ведущим');
+    if (me && me.epoch === G.epoch) {
+      await updateDoc(playerRef(), { first, last });
+      me.first = first; me.last = last;
+    } else {
+      const fromRound = G.status === 'running' ? G.round + 1 : G.round;
+      await setDoc(playerRef(), { first, last, fromRound, epoch: G.epoch, joinedAt: serverTimestamp() });
+      me = { first, last, fromRound, epoch: G.epoch };
+    }
+    try { localStorage.setItem(LS, JSON.stringify({ first, last })); } catch (_) {}
+    editing = false; keepAwake(); render();
+  } catch (err) {
+    console.error(err);
+    $('#join-err').textContent = err.code === 'permission-denied' ? 'Не удалось войти, попробуйте ещё раз' : (err.message || 'Нет связи');
+  }
+  $('#join-btn').disabled = false;
+});
+$('#rename').addEventListener('click', () => { $('#first').value = me.first; $('#last').value = me.last; editing = true; render(); });
+
+// ---------- СТОП ----------
+function onStop(e) {
+  e.preventDefault();
+  const t = Math.round(Clock.now());          // момент нажатия фиксируем сразу
+  if (!G || G.status !== 'running' || !me || !G.startAt || t < G.startAt) return;
+  if (pressedRound === G.round) return;
+  const round = G.round;
+  pressedRound = round;
+  if (navigator.vibrate) navigator.vibrate(60);
+  render();
+  sendPress(round, t, 0);
+}
+async function sendPress(round, t, attempt) {
+  try {
+    await setDoc(doc(db, 'games', 'main', 'presses', round + '_' + uid), { uid, round, t, at: serverTimestamp() });
+  } catch (err) {
+    console.warn('press', err);
+    if (err.code === 'permission-denied') { $('#play-hint').textContent = 'Нажатие не засчитано'; return; }
+    if (attempt < 3) setTimeout(() => sendPress(round, t, attempt + 1), 400 * (attempt + 1));
+  }
+}
+$('#stop').addEventListener('pointerdown', onStop);
+$('#stop').addEventListener('touchstart', onStop, { passive: false });
+
+// ---------- отрисовка ----------
+function render() {
+  if (!G) {
+    show('s-wait'); $('#hello').textContent = connected ? 'Ведущий ещё не открыл игру' : 'Подключаемся…';
+    $('#wait-target').textContent = '…'; $('#wait-hint').textContent = ''; return;
+  }
+  if (!me || editing || me.epoch !== G.epoch) { show('s-join'); return; }
+  $('#hello').textContent = 'Привет, ' + me.first + '!';
+  const elim = G.mode === 'elim';
+  const inTour = elim && Array.isArray(G.alive);
+  const entrant = inTour && Array.isArray(G.entrants) && G.entrants.includes(uid);
+  const alive = inTour && G.alive.includes(uid);
+  const playing = inTour ? alive : me.fromRound <= G.round;
+
+  if (G.status === 'lobby') {
+    $('#wait-target').textContent = fmtTarget(G.targetMs);
+    let hint = G.hideAfterMs > 0
+      ? `Секундомер будет виден только первые ${G.hideAfterMs / 1000} сек, дальше — считайте про себя.`
+      : 'Секундомер не будет виден — считайте про себя.';
+    if (elim) hint = 'Игра на выбывание: после каждого раунда половина игроков, остановивших время дальше всех от цели, выбывает. Останется один победитель! ' + hint;
+    $('#wait-hint').textContent = hint;
+    show('s-wait'); return;
+  }
+
+  if (G.status === 'running') {
+    if (inTour && !alive) {
+      if (entrant) { $('#out-text').textContent = `В игре осталось ${G.alive.length}. Следите за финалом на большом экране!`; show('s-out'); }
+      else { $('#late-title').textContent = 'Турнир уже идёт'; $('#late-text').textContent = 'Вы сыграете в следующем турнире. А пока — болейте за участников!'; show('s-late'); }
+      return;
+    }
+    if (!playing) { $('#late-title').textContent = 'Раунд уже идёт'; $('#late-text').textContent = 'Вы в игре со следующего раунда. Следите за экраном!'; show('s-late'); return; }
+    if (pressedRound === G.round) { show('s-pressed'); return; }
+    $('#play-target').textContent = (inTour ? `Раунд ${G.stage} · ` : '') + fmtTarget(G.targetMs);
+    show('s-play'); return;
+  }
+
+  // итоги раунда
+  const res = G.results || [];
+  const mine = res.find(r => r.uid === uid);
+  const box = $('#my-result'), verdict = $('#verdict');
+  verdict.className = ''; verdict.textContent = ''; verdict.style.fontSize = '';
+  $('#res-brand').textContent = inTour ? `Раунд ${G.stage}` : 'Результат';
+  $('#res-foot').textContent = 'Ждём следующий раунд…';
+
+  if (elim && G.champion) {
+    if (G.champion.uid === uid) { verdict.className = 'verdict win'; verdict.textContent = '🏆 Вы победили!'; }
+    else { verdict.className = 'verdict win'; verdict.style.fontSize = '24px'; verdict.innerHTML = '🏆 Победитель: ' + esc(G.champion.name); }
+    $('#res-foot').textContent = 'Турнир окончен. Спасибо за игру!';
+  } else if (inTour && mine) {
+    if (mine.out) { verdict.className = 'verdict out'; verdict.textContent = 'Вы выбыли'; }
+    else if (res.every(r => r.elapsed == null)) { verdict.className = 'verdict in'; verdict.textContent = 'Никто не нажал — переигрываем'; }
+    else { verdict.className = 'verdict in'; verdict.textContent = '✓ Вы проходите дальше!'; }
+    if (!mine.out) $('#res-foot').textContent = `В игре осталось ${G.alive.length}. Приготовьтесь к следующему раунду!`;
+  } else if (inTour && entrant) {
+    verdict.className = 'verdict out'; verdict.textContent = 'Вы выбыли раньше';
+    $('#res-foot').textContent = `В игре осталось ${G.alive.length}. Следите за экраном!`;
+  }
+
+  if (!mine) box.innerHTML = (!inTour && !playing) ? '<p class="muted">Вы присоединились во время раунда — играете в следующем.</p>' : '';
+  else if (mine.elapsed == null) box.innerHTML = '<h1>Вы не нажали 😅</h1>';
+  else box.innerHTML = `<div class="place">${mine.rank} место</div>
+    <p style="margin:10px 0 0;font-size:20px">Ваше время: <b>${esc(fmtTime(mine.elapsed))}</b> с</p>
+    <p class="muted" style="margin:4px 0 0">Отклонение: ${esc(fmtDiff(mine.diff))} · из ${res.filter(r => r.elapsed != null).length}</p>`;
+  const top = res.filter(r => r.elapsed != null).slice(0, 5);
+  $('#top').innerHTML = '<div class="muted" style="margin-bottom:6px">Лучшие</div>' + (top.map(r =>
+    `<div class="row ${r.uid === uid ? 'me' : ''}"><span>${r.rank}. ${esc(r.name)}</span><span>${esc(fmtDiff(r.diff))}</span></div>`).join('') || '<div class="muted">Никто не нажал</div>');
+  show('s-result');
+}
+
+function tick() {
+  if (G && G.status === 'running' && $('#s-play').classList.contains('on')) {
+    const el = Clock.now() - G.startAt, timer = $('#timer'), stop = $('#stop');
+    if (el < 0) {
+      timer.classList.remove('hidden-time'); timer.textContent = String(Math.ceil(-el / 1000));
+      stop.disabled = true; $('#play-hint').textContent = 'Приготовьтесь…';
+    } else {
+      stop.disabled = false;
+      if (el < G.hideAfterMs) {
+        timer.classList.remove('hidden-time'); timer.textContent = fmtTime(el);
+        $('#play-hint').textContent = `Время скроется через ${Math.ceil((G.hideAfterMs - el) / 1000)}…`;
+      } else {
+        timer.classList.add('hidden-time'); timer.textContent = '? ? ?';
+        $('#play-hint').textContent = 'Считайте про себя!';
+      }
+    }
+  }
+  requestAnimationFrame(tick);
+}
+
+// после перезагрузки страницы во время раунда — узнать, нажимал ли я уже
+async function checkPressed(round) {
+  if (checkedRound === round) return;
+  checkedRound = round;
+  try {
+    const s = await getDoc(doc(db, 'games', 'main', 'presses', round + '_' + uid));
+    if (s.exists() && G && G.round === round) { pressedRound = round; render(); }
+  } catch (_) {}
+}
+
+// ---------- запуск ----------
+(async function init() {
+  if (!configured()) return setupError('Игра ещё не настроена: впишите данные Firebase в файл <b>firebase-config.js</b>.');
+  try {
+    const saved = JSON.parse(localStorage.getItem(LS) || 'null');
+    if (saved) { $('#first').value = saved.first; $('#last').value = saved.last; }
+  } catch (_) {}
+  render();
+  try { uid = await connect(); }
+  catch (e) { console.error(e); return setupError('Не удалось подключиться к игре. Проверьте интернет и обновите страницу.'); }
+  Clock.uid = uid;
+
+  try { const s = await getDoc(playerRef()); if (s.exists()) me = s.data(); } catch (_) {}
+
+  onSnapshot(gameRef(), (snap) => {
+    const prev = G;
+    G = gameData(snap); connected = true;
+    if (G && G.status === 'running') { keepAwake(); if (pressedRound !== G.round) checkPressed(G.round); }
+    if (G && prev && G.epoch !== prev.epoch) me = null; // ведущий сбросил всех игроков
+    render();
+  }, (err) => { console.error(err); setupError('Нет доступа к игре. Обновите страницу.'); });
+
+  Clock.sync(4);
+  requestAnimationFrame(tick);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') { keepAwake(); if (!G || G.status !== 'running') Clock.sync(2); }
+  });
+})();
+</script>
+</body>
+</html>

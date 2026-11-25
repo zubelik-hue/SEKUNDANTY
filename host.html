@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Секунданты — экран ведущего</title>
+<style>
+  :root { --bg:#0d0f1a; --card:#171a2b; --line:#2a2e48; --text:#f3f4fa; --muted:#9aa0c0; --accent:#ffcc33; --red:#ff3b4e; --green:#3ddc97; }
+  * { box-sizing:border-box; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; }
+  body { display:flex; flex-direction:column; }
+  .stage { flex:1; display:flex; align-items:center; justify-content:center; padding:3vh 4vw; overflow:hidden; min-height:0; }
+  .view { display:none; width:100%; height:100%; }
+  .view.on { display:flex; }
+  .muted { color:var(--muted); }
+  .brand { font-size:clamp(14px,1.4vw,22px); letter-spacing:.35em; text-transform:uppercase; color:var(--accent); font-weight:800; }
+
+  /* главный экран: только название и QR */
+  #v-lobby { flex-direction:column; align-items:center; justify-content:center; gap:4vh; }
+  .title { font-size:clamp(44px,9vh,140px); font-weight:900; letter-spacing:.12em; color:var(--accent); line-height:1; margin-right:-.12em; }
+  .qr-box { background:#fff; border-radius:28px; padding:2.2vh; }
+  .qr-box svg { display:block; width:min(62vh, 80vw); height:min(62vh, 80vw); }
+  body.panel-hidden .qr-box svg { width:min(68vh, 80vw); height:min(68vh, 80vw); }
+
+  /* игра */
+  #v-run { flex-direction:column; align-items:center; justify-content:center; gap:3vh; text-align:center; }
+  .run-stage { font-size:clamp(18px,2.2vw,36px); color:var(--accent); font-weight:800; letter-spacing:.08em; text-transform:uppercase; min-height:1.2em; }
+  .run-goal { font-size:clamp(22px,3vw,48px); color:var(--muted); }
+  .run-goal b { color:var(--accent); }
+  .clock { font-size:clamp(90px,20vw,340px); font-weight:900; font-variant-numeric:tabular-nums; letter-spacing:-.03em; line-height:1; }
+  .clock.hidden-time { color:#3b4066; letter-spacing:.1em; animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 50% { color:#5b6199; } }
+  .progress { width:min(70vw,900px); height:14px; background:var(--card); border-radius:999px; overflow:hidden; }
+  .progress > div { height:100%; background:var(--green); width:0; transition: width .3s; }
+  .pressed-label { font-size:clamp(18px,2vw,32px); }
+
+  /* результаты */
+  #v-res { flex-direction:column; gap:2.5vh; align-items:center; }
+  .res-head { font-size:clamp(18px,2.2vw,36px); color:var(--accent); font-weight:800; letter-spacing:.06em; text-transform:uppercase; text-align:center; }
+  .winner { text-align:center; }
+  .winner .crown { font-size:clamp(40px,5vw,80px); }
+  .winner .name { font-size:clamp(36px,6vw,100px); font-weight:900; line-height:1.05; color:var(--accent); }
+  .winner .det { font-size:clamp(18px,2.2vw,36px); color:var(--muted); margin-top:1vh; }
+  .board { width:min(92vw,1100px); columns:1; column-gap:4vw; font-size:clamp(15px,1.6vw,26px); font-variant-numeric:tabular-nums; overflow:hidden; flex:1; }
+  .board.two { columns:2; }
+  .board:not(.two) { max-width:800px; }
+  .board .r { display:flex; gap:1em; padding:.35em 0; border-bottom:1px solid var(--line); break-inside:avoid; align-items:center; }
+  .board .r .n { width:2.2em; color:var(--muted); }
+  .board .r .nm { flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .board .r .t { color:var(--muted); }
+  .board .r .d { width:5.5em; text-align:right; }
+  .board .r .st { width:1.4em; text-align:center; }
+  .board .r.miss { opacity:.45; }
+  .board .r.out { opacity:.4; }
+  .board .r.out .nm { text-decoration: line-through; }
+  .board .r.in .st { color:var(--green); }
+
+  /* чемпион */
+  #v-champ { flex-direction:column; align-items:center; justify-content:center; gap:2vh; text-align:center; }
+  #v-champ .crown { font-size:clamp(70px,12vh,160px); }
+  #v-champ .lbl { font-size:clamp(20px,2.6vw,44px); color:var(--muted); letter-spacing:.2em; text-transform:uppercase; }
+  #v-champ .name { font-size:clamp(48px,9vw,160px); font-weight:900; color:var(--accent); line-height:1.05; }
+  #v-champ .det { font-size:clamp(18px,2.2vw,34px); color:var(--muted); }
+
+  /* панель управления */
+  .panel { background:#111426; border-top:1px solid var(--line); padding:10px 16px; display:flex; flex-wrap:wrap; gap:10px 14px; align-items:center; font-size:14px; }
+  .panel label { display:flex; align-items:center; gap:6px; color:var(--muted); }
+  .panel input, .panel select { background:var(--card); border:1px solid var(--line); color:var(--text); border-radius:8px; padding:7px 9px; font-size:14px; }
+  .panel input[type=number] { width:76px; }
+  .panel input.url-in { width:230px; }
+  .count { color:var(--text); font-weight:700; }
+  button { font:inherit; border:0; border-radius:8px; padding:8px 14px; cursor:pointer; font-weight:700; background:var(--card); color:var(--text); border:1px solid var(--line); }
+  button.primary { background:var(--green); color:#04210f; border-color:transparent; }
+  button.warn { background:var(--red); color:#fff; border-color:transparent; }
+  button:disabled { opacity:.4; cursor:default; }
+  .spacer { flex:1; }
+  .panel.collapsed > :not(.toggle) { display:none; }
+  .panel.collapsed { padding:4px 10px; background:transparent; border-color:transparent; }
+  .toggle { background:none; border:0; color:var(--muted); font-weight:400; }
+  .msg { color:var(--red); }
+  .hidden { display:none !important; }
+  #login { position:fixed; inset:0; background:var(--bg); display:flex; align-items:center; justify-content:center; z-index:10; }
+  #login form { display:flex; flex-direction:column; gap:12px; width:280px; text-align:center; }
+  #login input { font-size:20px; padding:12px; border-radius:10px; border:1px solid var(--line); background:var(--card); color:var(--text); text-align:center; }
+</style>
+</head>
+<body>
+
+<div id="login">
+  <form id="login-form">
+    <div class="brand">Экран ведущего</div>
+    <input id="pin" type="password" inputmode="numeric" placeholder="PIN" autofocus>
+    <button class="primary" type="submit">Войти</button>
+    <div class="msg" id="login-err"></div>
+  </form>
+</div>
+
+<main class="stage">
+  <section class="view" id="v-lobby">
+    <div class="title">СЕКУНДАНТЫ</div>
+    <div class="qr-box" id="qr"></div>
+  </section>
+
+  <section class="view" id="v-run">
+    <div class="run-stage" id="run-stage"></div>
+    <div class="run-goal">Цель: <b id="run-target"></b></div>
+    <div class="clock" id="clock">0,00</div>
+    <div class="progress"><div id="prog"></div></div>
+    <div class="pressed-label" id="pressed-label"></div>
+  </section>
+
+  <section class="view" id="v-res">
+    <div class="res-head" id="res-head"></div>
+    <div class="winner" id="winner"></div>
+    <div class="board" id="board"></div>
+  </section>
+
+  <section class="view" id="v-champ">
+    <div class="crown">🏆</div>
+    <div class="lbl">Победитель</div>
+    <div class="name" id="champ-name"></div>
+    <div class="det" id="champ-det"></div>
+  </section>
+</main>
+
+<div class="panel" id="panel">
+  <button class="toggle" id="toggle" title="Скрыть/показать панель (H)">▾ панель</button>
+  <span class="count" id="pcount">Игроков: 0</span>
+  <label>Режим
+    <select id="cfg-mode">
+      <option value="classic">Обычный</option>
+      <option value="elim">На выбывание</option>
+    </select>
+  </label>
+  <label>Цель, сек <input type="number" id="cfg-target" min="1" max="3600" step="0.5"></label>
+  <label>Скрыть через, сек <input type="number" id="cfg-hide" min="0" max="3600" step="1"></label>
+  <button id="btn-save">Сохранить</button>
+  <button class="primary" id="btn-start">▶ Старт</button>
+  <button id="btn-finish">■ Завершить раунд</button>
+  <button id="btn-new">↺ К QR-коду</button>
+  <button id="btn-tour">⟲ Новый турнир</button>
+  <span class="spacer"></span>
+  <label>Адрес для QR <input class="url-in" id="cfg-url" placeholder="https://…"></label>
+  <button id="btn-csv">CSV</button>
+  <button class="warn" id="btn-reset">Сбросить всех</button>
+  <span class="msg" id="msg"></span>
+</div>
+
+<script src="./qrcode.js"></script>
+<script type="module">
+import {
+  connect, configured, Clock, gameRef, gameData, db, doc, collection, query, where, onSnapshot, getDoc, getDocs,
+  setDoc, updateDoc, writeBatch, serverTimestamp, COUNTDOWN_MS, fmtTime, fmtTarget, fmtDiff, esc, $, setupError,
+} from './common.js';
+
+let uid = null, G = null;
+let players = new Map();   // uid -> {first, last, fromRound, joinedAt}
+let presses = new Map();   // uid -> {t, at}
+let pressUnsub = null, pressRound = null;
+let autoTimer = null, finishing = false;
+
+function setView(id) { document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.id === id)); }
+function flash(t) { $('#msg').textContent = t || ''; if (t) setTimeout(() => { if ($('#msg').textContent === t) $('#msg').textContent = ''; }, 4000); }
+const act = (fn) => fn().catch(e => { console.error(e); flash(e.code === 'permission-denied' ? 'Нет прав (PIN?)' : (e.message || 'Ошибка')); });
+const isElim = () => G && G.mode === 'elim';
+const nameOf = (id) => { const p = players.get(id); return p ? p.first + ' ' + p.last : '—'; };
+
+// ---------- вход по PIN ----------
+async function isAdmin() { const s = await getDoc(doc(db, 'admins', uid)); return s.exists(); }
+$('#login-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  $('#login-err').textContent = '';
+  try { await setDoc(doc(db, 'admins', uid), { pin: $('#pin').value.trim() }); boot(); }
+  catch (err) { $('#login-err').textContent = err.code === 'permission-denied' ? 'Неверный PIN' : 'Ошибка: ' + (err.message || err); }
+});
+
+// ---------- QR ----------
+function playerUrl() { return $('#cfg-url').value.trim() || new URL('./', location.href).href; }
+function drawQR() {
+  const url = playerUrl();
+  const qr = qrcode(0, 'M'); qr.addData(url); qr.make();
+  $('#qr').innerHTML = qr.createSvgTag({ cellSize: 8, margin: 2, scalable: true });
+  $('#qr').title = url;
+}
+$('#cfg-url').addEventListener('input', () => { try { localStorage.setItem('stoptimer.url', $('#cfg-url').value); } catch (_) {} drawQR(); });
+
+// ---------- кто играет в текущем раунде ----------
+function eligibleIds() {
+  if (!G) return [];
+  if (isElim() && Array.isArray(G.alive)) return G.alive.filter(id => players.has(id));
+  return [...players.entries()].filter(([, p]) => p.fromRound <= G.round).map(([id]) => id);
+}
+
+function readCfg() {
+  const t = Number($('#cfg-target').value), h = Number($('#cfg-hide').value);
+  const out = {};
+  if (Number.isFinite(t) && t >= 1 && t <= 3600) out.targetMs = Math.round(t * 1000);
+  if (Number.isFinite(h) && h >= 0 && h <= 3600) out.hideAfterMs = Math.round(h * 1000);
+  return out;
+}
+async function saveCfg() {
+  if (G.status === 'running') throw new Error('Нельзя менять во время раунда');
+  const upd = readCfg();
+  const mode = $('#cfg-mode').value;
+  if (mode !== (G.mode || 'classic')) {
+    if (isElim() && G.alive && !G.champion && !confirm('Идёт турнир. Сменить режим и прервать его?')) return;
+    Object.assign(upd, { mode, alive: null, entrants: null, stage: 0, champion: null, status: 'lobby', results: null, startedAt: null, round: G.round + 1 });
+  }
+  await updateDoc(gameRef(), upd); flash('Сохранено');
+}
+
+async function start() {
+  if (G.status === 'running') return;
+  if (isElim() && G.champion) throw new Error('Турнир окончен — нажмите «Новый турнир»');
+  finishing = false;
+  const round = G.status === 'finished' ? G.round + 1 : G.round;
+  const upd = { ...readCfg(), status: 'running', round, startedAt: serverTimestamp(), countdownMs: COUNTDOWN_MS, results: null };
+  if (isElim()) {
+    if (!Array.isArray(G.alive)) {
+      // первый раунд турнира — играют все, кто уже зарегистрировался
+      const all = [...players.entries()].filter(([, p]) => p.fromRound <= round).map(([id]) => id);
+      if (all.length < 2) throw new Error('Для турнира нужно хотя бы 2 игрока');
+      upd.alive = all; upd.entrants = all; upd.stage = 1; upd.startCount = all.length;
+    } else {
+      upd.stage = (G.stage || 0) + 1;
+    }
+  }
+  await updateDoc(gameRef(), upd);
+}
+
+function ranking() {
+  const ids = eligibleIds();
+  const rows = ids.filter(id => presses.has(id)).map(id => {
+    const pr = presses.get(id);
+    const elapsed = Math.round(pr.t - G.startAt);
+    return { uid: id, name: nameOf(id), elapsed, diff: elapsed - G.targetMs, at: pr.at ? pr.at.toMillis() : 0 };
+  });
+  rows.sort((a, b) => Math.abs(a.diff) - Math.abs(b.diff) || a.at - b.at);
+  let rank = 0, prev = null;
+  rows.forEach((r, i) => { const d = Math.abs(r.diff); if (d !== prev) { rank = i + 1; prev = d; } r.rank = rank; delete r.at; });
+  const missed = ids.filter(id => !presses.has(id)).map(id => ({ uid: id, name: nameOf(id), elapsed: null, diff: null, rank: null }));
+  return rows.concat(missed);
+}
+
+async function finish() {
+  if (!G || G.status !== 'running' || finishing) return;
+  finishing = true;
+  clearTimeout(autoTimer);
+  const results = ranking();
+  const upd = { status: 'finished', results };
+  if (isElim()) {
+    const n = results.length;
+    const pressed = results.filter(r => r.elapsed != null);
+    let survivors;
+    if (pressed.length === 0) survivors = results.map(r => r.uid);           // никто не нажал — переигрываем
+    else {
+      const keep = Math.ceil(n / 2);
+      survivors = pressed.filter(r => r.rank <= keep).map(r => r.uid);       // при равенстве на границе проходят оба
+    }
+    const set = new Set(survivors);
+    results.forEach(r => { r.out = !set.has(r.uid); });
+    upd.alive = survivors;
+    if (survivors.length === 1) {
+      const w = results.find(r => r.uid === survivors[0]);
+      upd.champion = { uid: w.uid, name: w.name, elapsed: w.elapsed, diff: w.diff };
+    }
+  }
+  try { await updateDoc(gameRef(), upd); }
+  catch (e) { finishing = false; throw e; }
+}
+
+async function toLobby() {
+  clearTimeout(autoTimer);
+  const upd = { status: 'lobby', round: G.round + 1, results: null, startedAt: null };
+  if (isElim() && G.champion) Object.assign(upd, { alive: null, entrants: null, stage: 0, champion: null });
+  await updateDoc(gameRef(), upd);
+}
+async function newTournament() {
+  if (isElim() && G.alive && !G.champion && !confirm('Прервать текущий турнир и начать заново со всеми игроками?')) return;
+  clearTimeout(autoTimer);
+  await updateDoc(gameRef(), { status: 'lobby', round: G.round + 1, results: null, startedAt: null, alive: null, entrants: null, stage: 0, champion: null });
+}
+async function resetAll() {
+  clearTimeout(autoTimer);
+  for (const name of ['presses', 'players']) {
+    const snap = await getDocs(collection(db, 'games', 'main', name));
+    let batch = writeBatch(db), n = 0;
+    for (const d of snap.docs) { batch.delete(d.ref); if (++n % 400 === 0) { await batch.commit(); batch = writeBatch(db); } }
+    await batch.commit();
+  }
+  await updateDoc(gameRef(), { status: 'lobby', round: 1, epoch: (G.epoch || 0) + 1, results: null, startedAt: null, alive: null, entrants: null, stage: 0, champion: null });
+}
+function downloadCsv() {
+  const res = (G && G.results) || ranking();
+  const rows = [['Место', 'Имя', 'Время, с', 'Отклонение, с'].concat(isElim() ? ['Итог'] : [])];
+  for (const r of res) rows.push([r.rank ?? '', r.name, r.elapsed == null ? 'не нажал' : (r.elapsed / 1000).toFixed(3), r.diff == null ? '' : (r.diff / 1000).toFixed(3)]
+    .concat(isElim() ? [r.out ? 'выбыл' : 'прошёл'] : []));
+  const csv = '﻿' + rows.map(r => r.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(';')).join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  a.download = `results-round-${G ? G.round : 1}.csv`; a.click();
+}
+
+$('#btn-save').onclick = () => act(saveCfg);
+$('#cfg-mode').onchange = () => act(saveCfg);
+$('#btn-start').onclick = () => act(start);
+$('#btn-finish').onclick = () => act(finish);
+$('#btn-new').onclick = () => act(toLobby);
+$('#btn-tour').onclick = () => act(newTournament);
+$('#btn-reset').onclick = () => { if (confirm('Удалить всех игроков и результаты?')) act(resetAll); };
+$('#btn-csv').onclick = downloadCsv;
+$('#toggle').onclick = () => {
+  const p = $('#panel'); p.classList.toggle('collapsed');
+  document.body.classList.toggle('panel-hidden', p.classList.contains('collapsed'));
+  $('#toggle').textContent = p.classList.contains('collapsed') ? '▴' : '▾ панель';
+};
+document.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  if (e.key === 'h' || e.key === 'р') $('#toggle').click();
+  if (e.key === 'f' || e.key === 'а') document.documentElement.requestFullscreen?.();
+});
+
+// ---------- автоматическое завершение ----------
+function checkAuto() {
+  if (!G || G.status !== 'running') return;
+  const ids = eligibleIds();
+  if (ids.length && ids.every(id => presses.has(id))) act(finish);
+}
+function armAutoTimer() {
+  clearTimeout(autoTimer);
+  if (!G || G.status !== 'running' || !G.startAt) return;
+  const left = G.startAt + G.targetMs + Math.max(30000, G.targetMs) - Clock.now();
+  autoTimer = setTimeout(() => act(finish), Math.max(0, left));
+}
+
+// ---------- отрисовка ----------
+let cfgTouched = false;
+['#cfg-target', '#cfg-hide'].forEach(s => $(s).addEventListener('input', () => cfgTouched = true));
+
+function render() {
+  if (!G) return;
+  const running = G.status === 'running';
+  const elim = isElim();
+  const inTour = elim && Array.isArray(G.alive) && !G.champion;
+  $('#btn-start').disabled = running || (elim && !!G.champion);
+  $('#btn-start').textContent = inTour && G.status === 'finished' ? '▶ Следующий раунд' : '▶ Старт';
+  $('#btn-finish').disabled = !running;
+  $('#btn-save').disabled = running;
+  $('#cfg-mode').disabled = running;
+  $('#btn-new').disabled = G.status !== 'finished' || inTour;
+  $('#btn-tour').classList.toggle('hidden', !elim);
+  $('#btn-tour').disabled = running;
+  $('#cfg-mode').value = G.mode || 'classic';
+  if (!cfgTouched || running) { $('#cfg-target').value = G.targetMs / 1000; $('#cfg-hide').value = G.hideAfterMs / 1000; }
+  if (running) cfgTouched = false;
+  $('#pcount').textContent = `Игроков: ${players.size}` + (elim && Array.isArray(G.alive) ? ` · в игре: ${G.alive.length}` : '');
+
+  if (G.status === 'lobby') { setView('v-lobby'); return; }
+
+  if (running) {
+    const ids = eligibleIds();
+    const pressed = ids.filter(id => presses.has(id)).length;
+    $('#run-stage').textContent = elim ? `Раунд ${G.stage} · в игре ${ids.length}` : '';
+    $('#run-target').textContent = fmtTarget(G.targetMs);
+    $('#prog').style.width = (ids.length ? 100 * pressed / ids.length : 0) + '%';
+    $('#pressed-label').textContent = `Нажали ${pressed} из ${ids.length}`;
+    setView('v-run');
+    return;
+  }
+
+  // итоги
+  if (elim && G.champion) {
+    const c = G.champion;
+    $('#champ-name').textContent = c.name;
+    $('#champ-det').textContent = `Финал: ${fmtTime(c.elapsed)} с при цели ${fmtTarget(G.targetMs)} · отклонение ${fmtDiff(c.diff)}` +
+      (G.startCount ? ` · обошёл(-ла) ${G.startCount - 1} соперников` : '');
+    setView('v-champ');
+    return;
+  }
+  const res = G.results || [];
+  const w = res.filter(r => r.rank === 1);
+  if (elim) {
+    const passed = res.filter(r => !r.out).length;
+    $('#res-head').textContent = res.every(r => r.elapsed == null)
+      ? `Раунд ${G.stage}: никто не нажал — переигрываем`
+      : `Раунд ${G.stage}: дальше проходят ${passed} из ${res.length}`;
+  } else $('#res-head').textContent = '';
+  $('#winner').innerHTML = w.length
+    ? `<div class="crown">${elim ? '🥇' : '🏆'}</div><div class="name">${w.map(r => esc(r.name)).join(' и ')}</div>
+       <div class="det">${esc(fmtTime(w[0].elapsed))} с при цели ${esc(fmtTarget(G.targetMs))} · отклонение ${esc(fmtDiff(w[0].diff))}</div>`
+    : '<div class="name">Никто не нажал</div>';
+  $('#board').classList.toggle('two', res.length > 10);
+  $('#board').innerHTML = res.map(r => {
+    const cls = elim ? (r.out ? 'out' : 'in') : (r.elapsed == null ? 'miss' : '');
+    const st = elim ? `<span class="st">${r.out ? '✕' : '✓'}</span>` : '';
+    return r.elapsed == null
+      ? `<div class="r ${cls}">${st}<span class="n">—</span><span class="nm">${esc(r.name)}</span><span class="d">не нажал</span></div>`
+      : `<div class="r ${cls}">${st}<span class="n">${r.rank}.</span><span class="nm">${esc(r.name)}</span><span class="t">${esc(fmtTime(r.elapsed))}</span><span class="d">${esc(fmtDiff(r.diff))}</span></div>`;
+  }).join('');
+  setView('v-res');
+}
+
+function tick() {
+  if (G && G.status === 'running' && G.startAt) {
+    const el = Clock.now() - G.startAt, c = $('#clock');
+    if (el < 0) { c.classList.remove('hidden-time'); c.textContent = String(Math.ceil(-el / 1000)); }
+    else if (el < G.hideAfterMs) { c.classList.remove('hidden-time'); c.textContent = fmtTime(el); }
+    else { c.classList.add('hidden-time'); c.textContent = '? ? ?'; }
+  }
+  requestAnimationFrame(tick);
+}
+
+function watchPresses(round) {
+  if (pressRound === round) return;
+  pressRound = round;
+  if (pressUnsub) pressUnsub();
+  presses = new Map();
+  pressUnsub = onSnapshot(query(collection(db, 'games', 'main', 'presses'), where('round', '==', round)), (snap) => {
+    presses = new Map(snap.docs.map(d => { const x = d.data({ serverTimestamps: 'estimate' }); return [x.uid, x]; }));
+    render(); checkAuto();
+  });
+}
+
+let booted = false;
+async function boot() {
+  if (booted) return; booted = true;
+  $('#login').style.display = 'none';
+  try { $('#cfg-url').value = localStorage.getItem('stoptimer.url') || ''; } catch (_) {}
+  drawQR();
+  const g = await getDoc(gameRef());
+  if (!g.exists()) await setDoc(gameRef(), { status: 'lobby', mode: 'classic', round: 1, epoch: 1, targetMs: 30000, hideAfterMs: 5000,
+    countdownMs: COUNTDOWN_MS, startedAt: null, results: null, alive: null, entrants: null, stage: 0, champion: null });
+  await Clock.sync(4);
+  onSnapshot(gameRef(), (snap) => {
+    const prevStatus = G && G.status, prevStart = G && G.startAt;
+    G = gameData(snap);
+    if (!G) return;
+    watchPresses(G.round);
+    if (G.status === 'running' && (prevStatus !== 'running' || prevStart !== G.startAt)) armAutoTimer();
+    render(); checkAuto();
+  });
+  onSnapshot(collection(db, 'games', 'main', 'players'), (snap) => {
+    players = new Map(snap.docs.map(d => [d.id, d.data({ serverTimestamps: 'estimate' })]));
+    render(); checkAuto();
+  });
+  requestAnimationFrame(tick);
+}
+
+(async function init() {
+  if (!configured()) return setupError('Игра ещё не настроена: впишите данные Firebase в файл <b>firebase-config.js</b>.');
+  try { uid = await connect(); }
+  catch (e) { console.error(e); return setupError('Не удалось войти в Firebase. Проверьте, что в проекте включён анонимный вход (Authentication → Anonymous).'); }
+  Clock.uid = uid;
+  try { if (await isAdmin()) boot(); }
+  catch (e) { console.error(e); $('#login-err').textContent = 'Не удаётся прочитать базу. Проверьте, что Firestore создан и правила опубликованы.'; }
+})();
+</script>
+</body>
+</html>
