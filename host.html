@@ -143,15 +143,16 @@
   <label>Адрес для QR <input class="url-in" id="cfg-url" placeholder="https://…"></label>
   <button id="btn-csv">CSV</button>
   <button class="warn" id="btn-reset">Сбросить всех</button>
+  <span class="muted" id="clockinfo" style="font-size:12px"></span>
   <span class="msg" id="msg"></span>
 </div>
 
-<script src="./qrcode.js"></script>
+<script src="./qrcode.js?v=4"></script>
 <script type="module">
 import {
   connect, configured, Clock, gameRef, gameData, db, doc, collection, query, where, onSnapshot, getDoc, getDocs,
-  setDoc, updateDoc, writeBatch, serverTimestamp, COUNTDOWN_MS, fmtTime, fmtTarget, fmtDiff, esc, $, setupError,
-} from './common.js';
+  setDoc, updateDoc, writeBatch, serverTimestamp, COUNTDOWN_MS, fmtTime, fmtTarget, fmtDiff, esc, $, setupError, debugLine,
+} from './common.js?v=4';
 
 let uid = null, G = null;
 let players = new Map();   // uid -> {first, last, fromRound, joinedAt}
@@ -226,6 +227,12 @@ async function start() {
     }
   }
   await updateDoc(gameRef(), upd);
+  // берём время старта, подтверждённое сервером (а не оценку по часам этого компьютера)
+  try {
+    const s = await getDoc(gameRef());
+    const g = gameData(s);
+    if (g && g.status === 'running' && g.startedAt) { G = g; armAutoTimer(); render(); }
+  } catch (_) {}
 }
 
 function ranking() {
@@ -430,7 +437,11 @@ async function boot() {
   const g = await getDoc(gameRef());
   if (!g.exists()) await setDoc(gameRef(), { status: 'lobby', mode: 'classic', round: 1, epoch: 1, targetMs: 30000, hideAfterMs: 5000,
     countdownMs: COUNTDOWN_MS, startedAt: null, results: null, alive: null, entrants: null, stage: 0, champion: null });
-  await Clock.sync(4);
+  await Clock.sync(5);
+  // часы компьютера могут подстраиваться (Windows делает это сама) — сверяемся заново каждые 30 секунд между раундами
+  const showClock = () => { $('#clockinfo').textContent = Clock.synced ? `часы сверены ±${Math.ceil((Clock.rtt || 0) / 2)} мс` : 'часы НЕ сверены'; debugLine(); };
+  showClock();
+  setInterval(async () => { if (!G || G.status !== 'running') { await Clock.sync(3); showClock(); } }, 30000);
   onSnapshot(gameRef(), (snap) => {
     const prevStatus = G && G.status, prevStart = G && G.startAt;
     G = gameData(snap);

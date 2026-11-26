@@ -38,7 +38,8 @@
   .row:last-child { border:0; }
   .row.me { color:var(--accent); font-weight:700; }
   .link { background:none; border:0; color:var(--muted); text-decoration:underline; font-size:15px; }
-  .conn { position:fixed; top:calc(env(safe-area-inset-top) + 8px); right:12px; font-size:12px; color:var(--red); display:none; }
+  .conn { position:fixed; left:12px; right:12px; bottom:calc(env(safe-area-inset-bottom) + 12px); padding:12px 14px; border-radius:14px; background:#3a1218; border:1px solid var(--red); color:#ffd7dc; font-size:14px; line-height:1.35; text-align:center; display:none; z-index:50; }
+  .conn b { color:#fff; }
   .verdict { font-size:26px; font-weight:900; padding:12px 18px; border-radius:16px; }
   .verdict.in { background:rgba(61,220,151,.15); color:var(--green); }
   .verdict.out { background:rgba(255,59,78,.15); color:var(--red); }
@@ -47,7 +48,7 @@
 </style>
 </head>
 <body>
-<div class="conn" id="conn">● нет связи</div>
+<div class="conn" id="conn"><b>Нет связи с игрой.</b> Проверьте интернет. Если не помогает — откройте ссылку в Chrome или Safari (не внутри Telegram/Instagram) или переключитесь между Wi-Fi и мобильным интернетом.</div>
 
 <!-- Регистрация -->
 <section class="screen" id="s-join">
@@ -115,8 +116,8 @@
 <script type="module">
 import {
   connect, configured, Clock, gameRef, gameData, db, doc, getDoc, setDoc, updateDoc, onSnapshot, serverTimestamp,
-  fmtTime, fmtTarget, fmtDiff, esc, $, setupError,
-} from './common.js';
+  fmtTime, fmtTarget, fmtDiff, esc, $, setupError, debugLine,
+} from './common.js?v=4';
 
 const LS = 'stoptimer.profile';
 let uid = null;
@@ -293,20 +294,37 @@ async function checkPressed(round) {
   } catch (_) {}
   render();
   try { uid = await connect(); }
-  catch (e) { console.error(e); return setupError('Не удалось подключиться к игре. Проверьте интернет и обновите страницу.'); }
+  catch (e) { console.error(e); return setupError('Не удалось подключиться к игре.<br><br>Проверьте интернет и обновите страницу. Если открыли ссылку внутри Telegram, Instagram или приложения-сканера — откройте её в Chrome или Safari.'); }
   Clock.uid = uid;
 
   try { const s = await getDoc(playerRef()); if (s.exists()) me = s.data(); } catch (_) {}
 
-  onSnapshot(gameRef(), (snap) => {
+  // Индикатор связи: если данные приходят только из кэша дольше 6 секунд — показываем подсказку
+  let offlineTimer = null;
+  const setOnline = (online) => {
+    if (online) { clearTimeout(offlineTimer); offlineTimer = null; $('#conn').style.display = 'none'; }
+    else if (!offlineTimer) offlineTimer = setTimeout(() => { $('#conn').style.display = 'block'; }, 6000);
+  };
+  setOnline(false);
+  window.addEventListener('offline', () => setOnline(false));
+
+  onSnapshot(gameRef(), { includeMetadataChanges: true }, (snap) => {
+    setOnline(!snap.metadata.fromCache);
     const prev = G;
     G = gameData(snap); connected = true;
-    if (G && G.status === 'running') { keepAwake(); if (pressedRound !== G.round) checkPressed(G.round); }
+    if (G && G.status === 'running') {
+      keepAwake();
+      if (pressedRound !== G.round) checkPressed(G.round);
+      // новый раунд — уточняем часы, пока идёт отсчёт 3-2-1
+      if (!prev || prev.status !== 'running' || prev.round !== G.round) Clock.sync(3);
+    }
     if (G && prev && G.epoch !== prev.epoch) me = null; // ведущий сбросил всех игроков
     render();
-  }, (err) => { console.error(err); setupError('Нет доступа к игре. Обновите страницу.'); });
+  }, (err) => { console.error(err); setOnline(false); });
 
-  Clock.sync(4);
+  Clock.sync(5);
+  // если часы так и не удалось сверить — пробуем снова, пока не получится
+  setInterval(() => { if (!Clock.synced) Clock.sync(2); debugLine(G ? `· ${G.status} р.${G.round}` : ''); }, 5000);
   requestAnimationFrame(tick);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') { keepAwake(); if (!G || G.status !== 'running') Clock.sync(2); }
